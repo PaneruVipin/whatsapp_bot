@@ -11,6 +11,7 @@ import {
   getQRScreenshot,
   watchChatList,
   addChatTask,
+  reWatch,
 } from "./services/whatsapp.js";
 
 const app = express();
@@ -40,6 +41,7 @@ app.get("/check-login", async (req, res) => {
       return res.status(401).send("Not logged in");
     } else {
       // Not logged in → return QR
+       await reWatch();
       const qrBase64 = await getQRScreenshot();
       // Send initial QR code UI
       res.status(303).send(`
@@ -91,5 +93,6 @@ app.get("/check-login", async (req, res) => {
   }
 });
 
+app.get("/re-watch", reWatch);
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));

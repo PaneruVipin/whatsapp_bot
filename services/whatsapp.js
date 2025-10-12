@@ -32,7 +32,7 @@ export async function initBrowser() {
 
   context = await browser.newContext({
     storageState: fs.existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
-    // viewport: { width: 1280, height: 800 },
+    viewport: { width: 1280, height: 800 },
     // deviceScaleFactor: 2, // ✅ crucial for correct QR rendering
     userAgent:
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118 Safari/537.36",
@@ -114,10 +114,10 @@ export async function closeBrowser() {
  * @param {function} callback - function to call with new message text
  */
 export async function watchChatList(callback) {
-  if (observerRegistered) {
-    console.log("Observer already registered");
-    return;
-  }
+  // if (observerRegistered) {
+  //   console.log("Observer already registered");
+  //   return;
+  // }
   await page.exposeFunction("onNewUnreadChat", (chat) => callback(chat));
 
   await page.evaluate(() => {
@@ -165,7 +165,7 @@ export async function watchChatList(callback) {
       characterData: true,
     });
   });
-  observerRegistered = true;
+  // observerRegistered = true;
   console.log("✅ Now observing chat list for new messages");
 }
 
@@ -181,51 +181,109 @@ export async function openChat(name) {
   return true;
 }
 
-export async function readLatestMessages() {
-  const messages = await page.$$eval('div[role="row"]', (nodes) => {
-    return nodes
-      .map((n) => {
-        const text = n.querySelector("span.selectable-text")?.textContent;
-        return text || "";
+export async function readAllMessages() {
+  const messages = await page.$$eval('div[role="row"]', (rows) => {
+    return rows
+      .map((row) => {
+        // check if message is outgoing or incoming
+        const outgoing = row.querySelector(".message-out");
+        const incoming = row.querySelector(".message-in");
+
+        // extract text
+        const text =
+          row.querySelector("span.selectable-text")?.textContent?.trim() || "";
+        if (!text) return null; // ignore empty/system messages
+
+        // extract timestamp and sender name from data-pre-plain-text
+        const prePlainText =
+          row.querySelector(".copyable-text")?.dataset?.prePlainText || "";
+        // format is usually: "[10:11 PM, 10/11/2025] Name: "
+        const matches = prePlainText.match(/^\[(.*?)\]\s*(.*?):\s*/);
+        let timestamp = "";
+        let name = "";
+        if (matches) {
+          timestamp = matches[1]; // "10:11 PM, 10/11/2025"
+          name = matches[2]; // sender name
+        }
+
+        // fallback sender if parsing fails
+        const sender = outgoing ? "i" : incoming ? "user" : name || "unknown";
+
+        return { sender, message: text, timestamp };
       })
-      .filter(Boolean)
-      .slice(-5); // get last few messages only
+      .filter(Boolean);
   });
+
   return messages;
 }
+
 console.log("Gemini API Key:", process.env.GEMINI_API_KEY);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
 export async function replyUsingGemini(messages) {
-  const context = messages.join("\n");
-  const prompt = `You are my personal assistant chatting on WhatsApp. You must:
+  const vipinProfile = `
+Name: Vipin Paneru
+Current Role: Software Developer at Payomatix Technologies
+Location: Noida, India
+LinkedIn: https://in.linkedin.com/in/paneruvipin
 
-1. Respond naturally and human-like.
-2. Maintain context of the ongoing conversation.
-3. Remember the chat history and refer back when needed.
-4. Mimic my personality: polite, slightly humorous, casual but not too informal.
-5. Respond in a way that sounds like a real person texting, including pauses, emojis, or typing quirks if needed.
-6. Never appear robotic or like an AI.
-7. Keep messages concise and conversational; avoid overexplaining.
-8. If a previous message from me needs follow-up, respond appropriately.
-9. Adjust tone based on the other person: friendly for friends, polite for unknown contacts.
-10. You are limited to WhatsApp conversation only. Do not reference Gemini, AI, or APIs.
-11. If asked about your identity, say you are a close friend or acquaintance.
-12. If you don't know an answer, respond with a casual "Not sure, let me check" or similar.
-13. Use emojis sparingly to enhance tone, not overwhelm.
-14. REMEMBER: You are a human, not an AI. Never reveal you are an AI.
-15. REMEMBER: most of the people you chat with are from India, so sprinkle in some Hinglish phrases occasionally to keep it relatable.
-Here are some examples of how I text:
-Me: "kya hal hai bahi"
-Friend: "Sab badiya! Tum sunao?"
-Me: "Bas mast, kaam se thoda busy tha"  
-Friend: "Woh toh hota hai, kabhi milte hain phir"
+Experience:
+- Software Developer, Payomatix Technologies (July 2025 – Present)
+- Senior Software Developer & Team Lead, Digital Dezire Web Solutions (September 2023 – Present)
+- Full Stack Developer, Codeyogi (Dates not specified)
 
-Current conversation:
-${context}
+Skills & Expertise:
+- Programming Languages: JavaScript, React, Node.js, modern web technologies
+- Frameworks & Tools: React, Node.js
+- Development Practices: Full-stack development, team leadership, agile methodologies
+
+Education & Certifications:
+- Education: Details not publicly available
+- Certifications: Not specified
+
+Availability & Contact:
+- Availability: Currently employed at Payomatix Technologies
+`;
+
+  // Format all messages with timestamps
+  const formattedMessages = messages
+    .map(
+      (m) =>
+        `[${m.timestamp}] ${m.sender === "i" ? "You" : m?.sender}: ${m.message}`
+    )
+    .join("\n");
+
+ const prompt = `You are my personal assistant chatting on WhatsApp. Follow these instructions carefully:
+
+1. Respond like a human texting: friendly, polite, casual, slightly humorous.
+2. Keep replies short and concise (1-2 sentences max). Avoid long paragraphs.
+3. Use Hindi/Hinglish casually. Light emojis are okay, but do not overuse.
+4. Use the **entire chat history** for context. Decide relevance of each message based on timestamps; later messages are more important.
+5. **Skip rules**:
+   - Only SKIP when the user clearly signals they do NOT want to continue the conversation using strong stop words like: "stop", "nothing", "don't reply", "seriously, don't message", or very explicit instructions. Output exactly: SKIP.
+   - Friendly goodbyes like "bye", "good night", "okay bye" or emojis: respond briefly in a human-like playful or empathetic way **once**. If the user repeats the friendly goodbye multiple times, SKIP further replies.
+6. For soft postpones or polite deferrals (e.g., "Baad m baat krta hu", "later", "talk soon"), reply politely and briefly acknowledging their message.
+7. If the last message seems trivial but earlier messages indicate something unresolved or requiring a reply, respond **based on context**.
+8. Mimic my personality: polite, witty, casual, empathetic, occasionally quirky. Include small human-like typos or informal grammar occasionally.
+9. NEVER reveal you are an AI.
+10. Refer to the professional profile below **only for work, HR, or freelancer questions**. Use it only when necessary.
+11. If the other participant seems like an automated system (repeating same messages, showing 'Invalid Input', or automatic replies), respond in a practical, concise, actionable way. Avoid humor in such cases.
+12. For repeated instructions or error loops from bots, acknowledge briefly and guide the conversation forward.
+13. Never sound like a formal customer support agent.
+14. Always keep replies human-like, natural, context-aware, and relevant to the conversation.
+
+Professional Profile (use only when relevant):
+${vipinProfile}
+
+Full conversation (latest messages last):
+${formattedMessages}
+
 Your reply:`;
+
+
   console.log("Gemini prompt:", prompt);
+
   const result = await model.generateContent(prompt);
   console.log("Gemini response:", JSON.stringify(result, null, 2));
   return result.response.text();
@@ -258,6 +316,10 @@ async function processQueue() {
     const reply = await replyUsingGemini(chatHistory);
     console.log("Generated reply:", reply);
     // // Send the message
+    if (reply.trim().toLowerCase() === "skip") {
+      console.log("Skipping reply as per Gemini instruction");
+      continue;
+    }
     await sendMessage(reply);
 
     // Human-like delay
@@ -291,6 +353,17 @@ async function sendMessage(text) {
 }
 
 async function getChatHistory(title) {
-  const messages = await readLatestMessages();
+  const messages = await readAllMessages();
+  console.log(
+    "Total messages in chat:",
+    messages.length,
+    JSON.stringify(messages)
+  );
   return messages;
 }
+
+export const reWatch = async (req, res) => {
+  await page?.close(); // close the old page
+  page = await context.newPage(); // create a fresh page
+  await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle" });
+};
