@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.56.0-focal
+FROM mcr.microsoft.com/playwright:latest
 
 WORKDIR /app
 COPY package*.json ./
