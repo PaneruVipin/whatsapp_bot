@@ -14,7 +14,7 @@ RUN npm ci --only=production
 COPY . .
 
 # Expose Railway’s default port
-EXPOSE 3000
+EXPOSE 8080
 
 # Define environment variables (Railway sets PORT automatically)
 ENV NODE_ENV=production
