@@ -1,24 +1,24 @@
-# Use official Node.js LTS image
-FROM node:18-alpine AS base
+# Use the official Playwright base image for version 1.56.0
+FROM mcr.microsoft.com/playwright:v1.56.0-noble AS base
 
 # Set working directory
 WORKDIR /app
 
-# Copy only package files first (for better caching)
+# Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies (only production)
+# Install only production dependencies
 RUN npm ci --only=production
 
-# Install Playwright and Chromium
-RUN npm install playwright && \
-    npx playwright install --with-deps chromium
-
-# Copy the rest of the app
+# Copy the rest of your application
 COPY . .
 
-# Expose the app port
+# Expose Railway’s default port
 EXPOSE 3000
 
-# Start the application
+# Define environment variables (Railway sets PORT automatically)
+ENV NODE_ENV=production
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# Start your Node.js app
 CMD ["node", "index.js"]
