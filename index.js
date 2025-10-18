@@ -12,7 +12,7 @@ import {
   watchChatList,
   addChatTask,
   reWatch,
-  saveSession
+  saveSession,
 } from "./services/whatsapp.js";
 
 const app = express();
@@ -101,9 +101,10 @@ app.get("/check-login", async (req, res) => {
     console.error("❌ Error in background login process:", err);
   }
 });
-
+app.get("/", (req, res) => {
+  res.send("WhatsApp Bot is running.");
+});
 app.get("/re-watch", reWatch);
 const PORT = process.env.PORT || 8080;
-const HOST = process.env.HOST || '0.0.0.0'
-app.listen(PORT,HOST, () => console.log(`🚀 Server running on port ${PORT}`));
-
+const HOST = process.env.HOST || "0.0.0.0";
+app.listen(PORT, HOST, () => console.log(`🚀 Server running on port ${PORT}`));
