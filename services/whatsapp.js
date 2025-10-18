@@ -21,7 +21,7 @@ export async function initBrowser() {
   if (page && context) return page;
 
   context = await chromium.launchPersistentContext(userdataDir, {
-    headless: false, // critical for WhatsApp Web on server
+    headless: true, // critical for WhatsApp Web on server
     storageState: fs.existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
     viewport: { width: 1280, height: 600 },
     userAgent:
