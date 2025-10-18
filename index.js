@@ -12,6 +12,7 @@ import {
   watchChatList,
   addChatTask,
   reWatch,
+  saveSession
 } from "./services/whatsapp.js";
 
 const app = express();
@@ -88,6 +89,7 @@ app.get("/check-login", async (req, res) => {
           // Optionally notify client via WebSocket or another API
           watchChatList(async (messageText) => {
             addChatTask(messageText?.name);
+            saveSession();
             console.log("New message received:", messageText);
           }).then(() => {
             console.log("✅ Now observing messages");

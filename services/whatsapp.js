@@ -77,9 +77,9 @@ export async function waitForLogin() {
     const status = await checkLoginStatus();
     if (status === "logged_in") {
       // Save session for future use
-      await context.storageState({ path: SESSION_FILE });
-      console.log("✅ WhatsApp logged in successfully, session saved.");
 
+      console.log("✅ WhatsApp logged in successfully, session saved.");
+      await saveSession();
       const screenshotPath = "./dist/--session-proof--/whatsapp_logged_in.png";
       await takeScreenshot(screenshotPath);
       return screenshotPath;
@@ -88,6 +88,9 @@ export async function waitForLogin() {
   }
 }
 
+export const saveSession = async () => {
+  await context.storageState({ path: SESSION_FILE, indexedDB: true });
+};
 /**
  * Get QR screenshot as base64
  */
@@ -252,7 +255,7 @@ Availability & Contact:
         `[${m.timestamp}] ${m.sender === "i" ? "You" : m?.sender}: ${m.message}`
     )
     .join("\n");
-const prompt = `You are chatting on WhatsApp as me. Follow these instructions carefully:
+  const prompt = `You are chatting on WhatsApp as me. Follow these instructions carefully:
 
 ## 1. GENERAL STYLE:
 1. Respond exactly as I would: friendly, casual, witty, polite, slightly humorous, empathetic, and human-like.
@@ -319,9 +322,6 @@ Full conversation (latest messages last):
 ${formattedMessages}
 
 Your reply:`;
-
-
-
 
   console.log("Gemini prompt:", prompt);
 
