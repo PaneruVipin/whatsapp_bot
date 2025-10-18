@@ -19,8 +19,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.get("/check-login", async (req, res) => {
+  const { poll } = req?.query || {};
   try {
-    const { poll } = req?.query || {};
     const page = await initBrowser();
     const status = await checkLoginStatus();
 
@@ -41,7 +41,7 @@ app.get("/check-login", async (req, res) => {
       return res.status(401).send("Not logged in");
     } else {
       // Not logged in → return QR
-       await reWatch();
+
       const qrBase64 = await getQRScreenshot();
       // Send initial QR code UI
       res.status(303).send(`
@@ -69,8 +69,16 @@ app.get("/check-login", async (req, res) => {
           </body>
         </html>
       `);
-
+    }
+  } catch (error) {
+    console.error("❌ Error during /check-login:", error);
+    res.status(500).json({ status: "error", message: error.message });
+  }
+  try {
+    if (!poll) {
       // Wait in background for login to complete and save session
+      await reWatch();
+      console.log("✅ Re-watch initiated after login check");
       waitForLogin()
         .then((finalScreenshot) => {
           console.log(
@@ -87,9 +95,8 @@ app.get("/check-login", async (req, res) => {
         })
         .catch((err) => console.error("❌ Error during login:", err));
     }
-  } catch (error) {
-    console.error("❌ Error during /check-login:", error);
-    res.status(500).json({ status: "error", message: error.message });
+  } catch (err) {
+    console.error("❌ Error in background login process:", err);
   }
 });
 

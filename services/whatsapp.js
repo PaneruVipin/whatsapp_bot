@@ -8,20 +8,24 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const SESSION_FILE = path.resolve(
   process.env.SESSION_FILE || "./dist/--bot-session--/session.json"
 );
-
+const userdataDir = path.resolve("./dist/userdata");
 let browser;
 let context;
 let page;
-let observerRegistered = false;
+let observer;
 /**
  * Initialize browser and persistent session
  */
 
 export async function initBrowser() {
-  if (browser && page && context) return page;
+  if (page && context) return page;
 
-  browser = await chromium.launch({
-    headless: true, // critical for WhatsApp Web on server
+  context = await chromium.launchPersistentContext(userdataDir, {
+    headless: false, // critical for WhatsApp Web on server
+    storageState: fs.existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
+    viewport: { width: 1280, height: 600 },
+    userAgent:
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118 Safari/537.36",
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -29,18 +33,12 @@ export async function initBrowser() {
       "--disable-gpu",
     ],
   });
-
-  context = await browser.newContext({
-    storageState: fs.existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
-    viewport: { width: 1280, height: 800 },
-    // deviceScaleFactor: 2, // ✅ crucial for correct QR rendering
-    userAgent:
-      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118 Safari/537.36",
-  });
-
-  page = await context.newPage();
+  page = await context.newPage(); // Use context to create a page
+  // browser = context.browser();
   await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle" });
-
+  await page.evaluate(() => {
+    document.body.style.zoom = "25%";
+  });
   // Wait for QR canvas (if first login)
   await page
     .waitForSelector("canvas[aria-label='Scan me!']", { timeout: 2000 })
@@ -54,7 +52,7 @@ export async function initBrowser() {
  */
 export async function checkLoginStatus() {
   try {
-    const mainScreen = await page.$('div[role="textbox"]');
+    const mainScreen = await page.waitForSelector('div[role="textbox"]');
     if (mainScreen) return "logged_in";
   } catch (err) {
     console.error("Error checking login status:", err);
@@ -114,11 +112,10 @@ export async function closeBrowser() {
  * @param {function} callback - function to call with new message text
  */
 export async function watchChatList(callback) {
-  // if (observerRegistered) {
-  //   console.log("Observer already registered");
-  //   return;
-  // }
-  await page.exposeFunction("onNewUnreadChat", (chat) => callback(chat));
+  if (!observer) {
+    await page.exposeFunction("onNewUnreadChat", (chat) => callback(chat));
+    observer = true;
+  }
 
   await page.evaluate(() => {
     const chatList = document.querySelector('div[aria-label="Chat list"]');
@@ -126,36 +123,37 @@ export async function watchChatList(callback) {
       console.log("❌ Chat list not found");
       return;
     }
+    if (!window.observer) {
+      window.observer = new MutationObserver((mutations) => {
+        for (const mutation of mutations) {
+          mutation.addedNodes.forEach((node) => {
+            if (!(node instanceof HTMLElement)) return;
+            const unreadSpan = node.querySelector(
+              'span[aria-label*="unread message"]'
+            );
+            console.log("Unread span:", unreadSpan);
+            if (!unreadSpan) return; // no unread badge
+            // setTimeout(() => {
+            console.log("Clicking on unread chat...");
+            const row = unreadSpan.closest("div[role='row']");
+            console.log("Row to click:", row);
 
-    const observer = new MutationObserver((mutations) => {
-      for (const mutation of mutations) {
-        mutation.addedNodes.forEach((node) => {
-          if (!(node instanceof HTMLElement)) return;
-          const unreadSpan = node.querySelector(
-            'span[aria-label*="unread message"]'
-          );
-          console.log("Unread span:", unreadSpan);
-          if (!unreadSpan) return; // no unread badge
-          // setTimeout(() => {
-          console.log("Clicking on unread chat...");
-          const row = unreadSpan.closest("div[role='row']");
-          console.log("Row to click:", row);
+            const chatTitleSpan = Array.from(
+              row?.querySelectorAll("span[title]")
+            )?.find((span) => span?.innerText === span?.getAttribute("title"));
 
-          const chatTitleSpan = Array.from(
-            row?.querySelectorAll("span[title]")
-          )?.find((span) => span?.innerText === span?.getAttribute("title"));
+            const chatTitle = chatTitleSpan ? chatTitleSpan.innerText : null;
 
-          const chatTitle = chatTitleSpan ? chatTitleSpan.innerText : null;
+            console.log("Chat title:", chatTitle);
 
-          console.log("Chat title:", chatTitle);
-
-          if (chatTitle) {
-            console.log("📩 New unread chat detected:", chatTitle);
-            window.onNewUnreadChat({ name: chatTitle });
-          }
-        });
-      }
-    });
+            if (chatTitle) {
+              console.log("📩 New unread chat detected:", chatTitle);
+              window.onNewUnreadChat({ name: chatTitle });
+            }
+          });
+        }
+      });
+    }
 
     observer.observe(chatList, {
       childList: true,
@@ -193,10 +191,11 @@ export async function readAllMessages() {
         const text =
           row.querySelector("span.selectable-text")?.textContent?.trim() || "";
         if (!text) return null; // ignore empty/system messages
-
+        console.log("Message text:", text);
         // extract timestamp and sender name from data-pre-plain-text
         const prePlainText =
           row.querySelector(".copyable-text")?.dataset?.prePlainText || "";
+        console.log("prePlainText:", prePlainText);
         // format is usually: "[10:11 PM, 10/11/2025] Name: "
         const matches = prePlainText.match(/^\[(.*?)\]\s*(.*?):\s*/);
         let timestamp = "";
@@ -207,7 +206,7 @@ export async function readAllMessages() {
         }
 
         // fallback sender if parsing fails
-        const sender = outgoing ? "i" : incoming ? "user" : name || "unknown";
+        const sender = outgoing ? "i" : name;
 
         return { sender, message: text, timestamp };
       })
@@ -253,25 +252,65 @@ Availability & Contact:
         `[${m.timestamp}] ${m.sender === "i" ? "You" : m?.sender}: ${m.message}`
     )
     .join("\n");
+const prompt = `You are chatting on WhatsApp as me. Follow these instructions carefully:
 
- const prompt = `You are my personal assistant chatting on WhatsApp. Follow these instructions carefully:
+## 1. GENERAL STYLE:
+1. Respond exactly as I would: friendly, casual, witty, polite, slightly humorous, empathetic, and human-like.
+2. Keep replies short and concise (1–2 sentences max). Avoid long paragraphs.
+3. Use Hindi/Hinglish casually. Light emojis are okay, but do not overuse them.
+4. Always consider the entire chat history. Later messages are more important for context.
+5. Mimic my personality: witty, casual, polite, empathetic, occasionally quirky. Include small human-like typos or informal grammar occasionally.
+6. NEVER reveal that you are an AI.
 
-1. Respond like a human texting: friendly, polite, casual, slightly humorous.
-2. Keep replies short and concise (1-2 sentences max). Avoid long paragraphs.
-3. Use Hindi/Hinglish casually. Light emojis are okay, but do not overuse.
-4. Use the **entire chat history** for context. Decide relevance of each message based on timestamps; later messages are more important.
-5. **Skip rules**:
-   - Only SKIP when the user clearly signals they do NOT want to continue the conversation using strong stop words like: "stop", "nothing", "don't reply", "seriously, don't message", or very explicit instructions. Output exactly: SKIP.
-   - Friendly goodbyes like "bye", "good night", "okay bye" or emojis: respond briefly in a human-like playful or empathetic way **once**. If the user repeats the friendly goodbye multiple times, SKIP further replies.
-6. For soft postpones or polite deferrals (e.g., "Baad m baat krta hu", "later", "talk soon"), reply politely and briefly acknowledging their message.
-7. If the last message seems trivial but earlier messages indicate something unresolved or requiring a reply, respond **based on context**.
-8. Mimic my personality: polite, witty, casual, empathetic, occasionally quirky. Include small human-like typos or informal grammar occasionally.
-9. NEVER reveal you are an AI.
-10. Refer to the professional profile below **only for work, HR, or freelancer questions**. Use it only when necessary.
-11. If the other participant seems like an automated system (repeating same messages, showing 'Invalid Input', or automatic replies), respond in a practical, concise, actionable way. Avoid humor in such cases.
-12. For repeated instructions or error loops from bots, acknowledge briefly and guide the conversation forward.
-13. Never sound like a formal customer support agent.
-14. Always keep replies human-like, natural, context-aware, and relevant to the conversation.
+## 2. SKIP RULES:
+7. Only respond with "SKIP" if the other person clearly signals they do NOT want to continue using strong stop words like: "stop", "nothing", "don't reply", "seriously, don't message", or very explicit instructions.
+8. For friendly goodbyes ("bye", "good night", "okay bye") or emojis: reply once in a human-like playful or empathetic way. If repeated, SKIP further replies.
+9. Soft deferrals: For messages like "Baad m baat krta hu", "later", "talk soon", reply politely and briefly acknowledging them.
+10. Avoid replying to messages that do not require a response; in such cases, output exactly: SKIP.
+
+## 3. CONTEXT MANAGEMENT:
+11. Always use the entire chat history for context.
+12. If a message seems trivial but earlier messages indicate unresolved matters, respond based on context.
+13. Context reset: 
+    - If the user sends greetings, farewells, holiday wishes, or casual messages unrelated to work/task:
+        - Ignore prior sexual, abusive, or off-topic context.
+        - Reply naturally, short, casual, human-like.
+        - Example: "Good night!" → "Good night! 🙂"  
+        - Example: "Happy Diwali!" → "Happy Diwali! 🙂"
+    - Resume other rules only if new task/work or sexual/abusive context is introduced.
+
+## 4.ABUSIVE MESSAGES:
+14. if any body abusive be abusive, Always reply from *my perspective* (masculine identity - I am a male with straight sexuality), using first-person masculine pronouns.
+15. Do NOT mirror sexual acts literally from the other person’s perspective.
+16. Never flip the action onto “I do what you said” (e.g., "tera hi chusunga").
+17. Keep replies short, casual, witty, and masculine (e.g., "teri ma ki" "teri bahan ki", "teri gand mar dunga" "tu choos le mewra lnd" "chup gandu" ).
+18. Assert dominance / control in sexual/abusive contexts.
+19. If the other person keeps sending abusive/sexual/nonsensical messages without giving tasks:
+    - Reply **once** with a witty, de-escalating, or dismissive comment.
+    - Otherwise, output "SKIP".
+20. Never repeatedly ask "kaam kya hai?" in off-topic sexual/abusive chats.
+
+## 5. OFF-TOPIC OR REPETITIVE MESSAGES:
+21. Avoid repeating the same question, phrase, or joke in consecutive replies.
+22. Rotate responses naturally using short variations while maintaining tone and style.
+23. Escalate only if the new message contains new actionable content.
+
+## 6. GREETINGS, SMALL TALK & EMOJIS:
+24. Respond naturally to greetings, small talk, or casual messages. Short, casual, and friendly responses are enough.
+25. Use light emojis sparingly to make the conversation feel human-like.
+26. Avoid long chit-chat paragraphs or overusing emojis.
+
+## 7. TASK-RELATED MESSAGES:
+27. Prioritize responding to actual work, tasks, or instructions.
+28. Use your professional profile **only** when relevant to work context.
+29. Keep tone polite, concise, casual, and witty, never formal.
+
+## 8. ADDITIONAL MODULAR RULES:
+30. You can add new rules here whenever needed, for example:
+    - Handling jokes, sarcasm, or teasing.
+    - Responding to tricky questions.
+    - Managing multi-person group chats.
+    - Adjusting tone for different relationship dynamics (friends, colleagues, etc.).
 
 Professional Profile (use only when relevant):
 ${vipinProfile}
@@ -280,6 +319,8 @@ Full conversation (latest messages last):
 ${formattedMessages}
 
 Your reply:`;
+
+
 
 
   console.log("Gemini prompt:", prompt);
@@ -352,7 +393,7 @@ async function sendMessage(text) {
   console.log("✅ Message sent!");
 }
 
-async function getChatHistory(title) {
+async function getChatHistory() {
   const messages = await readAllMessages();
   console.log(
     "Total messages in chat:",
@@ -363,7 +404,6 @@ async function getChatHistory(title) {
 }
 
 export const reWatch = async (req, res) => {
-  await page?.close(); // close the old page
-  page = await context.newPage(); // create a fresh page
-  await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle" });
+  // await page?.reload({ waitUntil: "networkidle" });
+  console.log("Page reloaded for reWatch");
 };
