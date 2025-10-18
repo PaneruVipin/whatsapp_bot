@@ -23,7 +23,7 @@ export async function initBrowser() {
   context = await chromium.launchPersistentContext(userdataDir, {
     headless: true, // critical for WhatsApp Web on server
     storageState: fs.existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
-    viewport: { width: 1280, height: 600 },
+    viewport: { width: 1280, height: 800 },
     userAgent:
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118 Safari/537.36",
     args: [
@@ -36,14 +36,11 @@ export async function initBrowser() {
   page = await context.newPage(); // Use context to create a page
   // browser = context.browser();
   await page.goto("https://web.whatsapp.com", { waitUntil: "networkidle" });
-  await page.evaluate(() => {
-    document.body.style.zoom = "25%";
-  });
+
   // Wait for QR canvas (if first login)
   await page
     .waitForSelector("canvas[aria-label='Scan me!']", { timeout: 2000 })
     .catch(() => {});
-
   return page;
 }
 
@@ -53,7 +50,12 @@ export async function initBrowser() {
 export async function checkLoginStatus() {
   try {
     const mainScreen = await page.waitForSelector('div[role="textbox"]');
-    if (mainScreen) return "logged_in";
+    if (mainScreen) {
+      await page.evaluate(() => {
+        document.body.style.zoom = "25%";
+      });
+      return "logged_in";
+    }
   } catch (err) {
     console.error("Error checking login status:", err);
   }
