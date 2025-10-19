@@ -377,7 +377,7 @@ async function processQueue() {
 async function sendMessage(text) {
   // 1️⃣ Find the contenteditable div
   try {
-    const input = await page.waitForSelector("*[aria-placeholder='Type a message']", { timeout: 5000 });
+    const input = await page.$("*[aria-placeholder='Type a message']");
     if (!input) {
       console.log("WhatsApp message box not found");
       return;
