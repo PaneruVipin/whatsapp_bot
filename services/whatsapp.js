@@ -51,9 +51,9 @@ export async function checkLoginStatus() {
   try {
     const mainScreen = await page.waitForSelector('div[role="textbox"]');
     if (mainScreen) {
-      await page.evaluate(() => {
-        document.body.style.zoom = "25%";
-      });
+      // await page.evaluate(() => {
+      //   document.body.style.zoom = "25%";
+      // });
       return "logged_in";
     }
   } catch (err) {
