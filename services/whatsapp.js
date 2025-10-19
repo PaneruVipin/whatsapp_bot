@@ -21,7 +21,7 @@ export async function initBrowser() {
   if (page && context) return page;
 
   context = await chromium.launchPersistentContext(userdataDir, {
-    headless: false, // critical for WhatsApp Web on server
+    headless: true, // critical for WhatsApp Web on server
     storageState: fs.existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
     viewport: { width: 1280, height: 800 },
     userAgent:
@@ -36,6 +36,8 @@ export async function initBrowser() {
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
       "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--disable-features=VizDisplayCompositor",
     ],
   });
   page = await context.newPage(); // Use context to create a page
