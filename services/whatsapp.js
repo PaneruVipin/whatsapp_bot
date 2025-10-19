@@ -329,8 +329,6 @@ ${formattedMessages}
 
 Your reply:`;
 
-  console.log("Gemini prompt:", prompt);
-
   const result = await model.generateContent(prompt);
   console.log("Gemini response:", JSON.stringify(result, null, 2));
   return result.response.text();
@@ -378,25 +376,33 @@ async function processQueue() {
 
 async function sendMessage(text) {
   // 1️⃣ Find the contenteditable div
-  const input = await page.$(
-    'div[contenteditable="true"][role="textbox"]:not([aria-label*="Search"])'
-  );
-  if (!input) throw new Error("WhatsApp message box not found");
+  try {
+    const input = await page.waitForSelector(
+      'div[contenteditable="true"][role="textbox"]:not([aria-label*="Search"])',
+      { timeout: 5000 }
+    );
+    if (!input) {
+      console.log("WhatsApp message box not found");
+      return;
+    }
 
-  // 2️⃣ Focus the input
-  await input.focus();
+    // 2️⃣ Focus the input
+    await input.focus();
 
-  // 3️⃣ Type message line by line (human-like)
-  const lines = text.split("\n");
-  for (const line of lines) {
-    await input.type(line, { delay: 50 }); // human-like typing
-    await input.press("Shift+Enter"); // new line without sending
+    // 3️⃣ Type message line by line (human-like)
+    const lines = text.split("\n");
+    for (const line of lines) {
+      await input.type(line, { delay: 50 }); // human-like typing
+      await input.press("Shift+Enter"); // new line without sending
+    }
+
+    // 4️⃣ Press Enter to send
+    await input.press("Enter");
+
+    console.log("✅ Message sent!");
+  } catch (err) {
+    console.error("Error sending message:", err);
   }
-
-  // 4️⃣ Press Enter to send
-  await input.press("Enter");
-
-  console.log("✅ Message sent!");
 }
 
 async function getChatHistory() {
