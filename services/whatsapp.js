@@ -382,22 +382,25 @@ async function processQueue() {
 async function sendMessage(text) {
   // 1️⃣ Find the contenteditable div
   try {
+    console.log("Sending message:", 1);
     const input = await page.$("*[aria-placeholder='Type a message']");
     if (!input) {
       console.log("WhatsApp message box not found");
       return;
     }
-
+    console.log("Sending message:", 2);
     // 2️⃣ Focus the input
     await input.focus();
-
+    console.log("Sending message:", 3);
     // 3️⃣ Type message line by line (human-like)
     const lines = text.split("\n");
+    console.log("Message lines:", lines);
     for (const line of lines) {
+      console.log("Typing line:", line);
       await input.type(line, { delay: 50 }); // human-like typing
       await input.press("Shift+Enter"); // new line without sending
     }
-
+    console.log("Ready:");
     // 4️⃣ Press Enter to send
     await input.press("Enter");
 
