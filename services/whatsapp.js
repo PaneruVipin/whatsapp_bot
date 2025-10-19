@@ -23,11 +23,11 @@ export async function initBrowser() {
   context = await chromium.launchPersistentContext(userdataDir, {
     headless: true, // critical for WhatsApp Web on server
     storageState: fs.existsSync(SESSION_FILE) ? SESSION_FILE : undefined,
-    viewport: { width: 1280, height: 800 },
+    // viewport: { width: 1280, height: 800 },
     userAgent:
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118 Safari/537.36",
-    screen: { width: 1280, height: 800 },
-    deviceScaleFactor: 1,
+    // screen: { width: 1280, height: 800 },
+    // deviceScaleFactor: 1,
     colorScheme: "dark",
     timezoneId: "Asia/Kolkata",
     locale: "en-US",
