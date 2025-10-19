@@ -26,6 +26,11 @@ export async function initBrowser() {
     viewport: { width: 1280, height: 800 },
     userAgent:
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118 Safari/537.36",
+    screen: { width: 1280, height: 800 },
+    deviceScaleFactor: 1,
+    colorScheme: "light",
+    timezoneId: "Asia/Kolkata",
+    locale: "en-US",
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -51,9 +56,6 @@ export async function checkLoginStatus() {
   try {
     const mainScreen = await page.waitForSelector('div[role="textbox"]');
     if (mainScreen) {
-      // await page.evaluate(() => {
-      //   document.body.style.zoom = "25%";
-      // });
       return "logged_in";
     }
   } catch (err) {
