@@ -105,9 +105,13 @@ app.get("/", (req, res) => {
   res.send("WhatsApp Bot is running.");
 });
 app.get("/re-watch", reWatch);
-const PORT = process.env.PORT || 8080;
+const PORT = Number(process.env.PORT) || "8080";
 const HOST = process.env.HOST || "0.0.0.0";
+setInterval(() => {
+  console.log("⏰ Keeping server alive...");
+}, 1000);
 const server = app.listen(PORT, HOST, () =>
   console.log(`🚀 Server running on port ${PORT}`)
 );
+
 server.timeout = 300000;
