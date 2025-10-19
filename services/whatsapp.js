@@ -227,7 +227,12 @@ export async function readAllMessages() {
 
 console.log("Gemini API Key:", process.env.GEMINI_API_KEY);
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+// const res = await genAI..listModels();
+// res.models.forEach((m) => console.log(m.name));
+const model = genAI.getGenerativeModel({
+  model: process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
+});
 
 export async function replyUsingGemini(messages) {
   const vipinProfile = `
