@@ -107,9 +107,9 @@ app.get("/", (req, res) => {
 app.get("/re-watch", reWatch);
 const PORT = Number(process.env.PORT) || "8080";
 const HOST = process.env.HOST || "0.0.0.0";
-setInterval(() => {
-  console.log("⏰ Keeping server alive...");
-}, 1000);
+// setInterval(() => {
+//   console.log("⏰ Keeping server alive...");
+// }, 1000);
 const server = app.listen(PORT, HOST, () =>
   console.log(`🚀 Server running on port ${PORT}`)
 );
