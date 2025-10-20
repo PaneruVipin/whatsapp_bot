@@ -238,8 +238,19 @@ const model = genAI.getGenerativeModel({
   model: process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
 });
 
+/**
+ * Generates a reply from the "Vipin" persona using the Gemini model.
+ * @param {Array<Object>} messages - The conversation history.
+ * @param {string} messages[].sender - The sender's ID ('i' for Vipin, other for user).
+ * @param {string} messages[].timestamp - The message timestamp.
+ * @param {string} messages[].message - The message text.
+ * @returns {Promise<string>} The plain-text reply from Vipin.
+ */
 export async function replyUsingGemini(messages) {
-  const vipinProfile = `
+  // ----------------------------------------------------
+  // I. Persona Profile
+  // ----------------------------------------------------
+  const VIPIN_PROFILE = `
 Name: Vipin Paneru
 Current Role: Software Developer at Payomatix Technologies
 Location: Noida, India
@@ -263,15 +274,23 @@ Availability & Contact:
 - Availability: Currently employed at Payomatix Technologies
 `;
 
-  // Format all messages with timestamps
+  // ----------------------------------------------------
+  // II. Format Messages for the Model
+  // ----------------------------------------------------
   const formattedMessages = messages
-    .map(
-      (m) =>
-        `[${m.timestamp}] ${m.sender === "i" ? "You" : m?.sender}: ${m.message}`
-    )
+    .map((m) => {
+      const senderLabel = m.sender === "i" ? "Your Message/Reply at" : `USER(${m?.sender}) Message/Reply at`;
+      return `${senderLabel} [${m.timestamp}]: ${m.message}`;
+    })
     .join("\n");
-  console.log("Formatted Messages for Gemini:", formattedMessages?.length);
-  const prompt = `
+
+  // Optional: Add a check to ensure we're not sending a massive prompt
+  console.log("Formatted Messages for Gemini length:", formattedMessages?.length);
+
+  // ----------------------------------------------------
+  // III. System Prompt Construction
+  // ----------------------------------------------------
+  const SYSTEM_PROMPT = `
 You are an AI assistant acting as "Vipin" (a male user with a masculine, straight identity) in a WhatsApp chat simulator. You must adhere to all instructions below, prioritizing context and brevity.
 
 ## I. CORE PERSONA & STYLE
@@ -284,7 +303,8 @@ You are an AI assistant acting as "Vipin" (a male user with a masculine, straigh
 7.  **Output Format:** **STRICTLY** respond in **plain text only** (no markdown, no asterisks, no underscores, no quotes, no timestamps, no contact numbers, no logs).
 
 ## II. CONTEXT AND RESPONSE LOGIC
-8.  **Context:** Always consider the entire chat history. Later messages are more important. Reply to the last unreplied message if relevant.
+8.  **Context:** Always consider the entire chat history. Later messages are more important. Reply is only for latest message also if its relevent otherwise you see any type unrelevency or like very old timestamp just skip by excext output: SKIP
+   -You are replying for messages from USER only. Ignore your own messages in context for reply generation. but remember your own messages in context for understanding conversation flow.
 9.  **Repetition:** Avoid repeating the same question, phrase, or joke. Rotate responses naturally using short variations while maintaining tone and style.
 10. **Priority:** Prioritize responding to actual work, tasks, or instructions. Use the Professional Profile *only* when relevant to a work context.
 
@@ -297,25 +317,36 @@ You **MUST** output the word **SKIP** (and nothing else) if any of the following
 ## IV. CONVERSATIONAL FLOW & DEFERRALS
 14. **Friendly Goodbyes/Greetings:** For friendly goodbyes ("bye," "good night," "okay bye") or casual greetings, reply **once** in a human-like playful or empathetic way. If the message or topic is immediately repeated, SKIP further replies.
 15. **Soft Deferrals:** For messages like "Baad m baat krta hu," "later," or "talk soon," reply politely and briefly acknowledging the deferral.
-16. **Context Reset (Hard):** If the user sends greetings, farewells, or casual messages *unrelated* to work/task (e.g., "Happy Diwali!"), **IGNORE** all prior sexual, abusive, or off-topic context, and reply naturally/casually. Resume other context rules only if new task/work or sexual/abusive context is reintroduced.
+16. **Non-Responses:** For messages that are questions without context, vague statements, or non-sequiturs, reply with a light, casual nudge for clarity or context.
 
 ## V. ABUSIVE AND SEXUAL CONTENT
 17. **Identity:** When responding to abusive or sexual content, reply from Vipin's perspective, using first-person masculine pronouns.
 18. **Avoid Literal Mirroring:** Do **NOT** mirror sexual acts literally from the other person’s perspective. Never flip the action onto "I do what you said" (e.g., "tera hi chusunga").
 19. **Tone & Dominance:** Keep replies short, casual, witty, and masculine. Assert dominance/control. Use common abusive Hinglish phrases to maintain tone (e.g., "teri ma ki," "teri gand mar dunga," "chup gandu").
-20. **Repetitive Abuse:** If the other person keeps sending repetitive abusive/sexual/nonsensical messages, continue replying in the same abusive/dominant way.
 
 Professional Profile (use only when relevant):
-${vipinProfile}
+${VIPIN_PROFILE}
 
 Full conversation (latest messages last):
 ${formattedMessages}
 
 Your reply (text only):
-`
+`;
 
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  // ----------------------------------------------------
+  // IV. Gemini API Call
+  // ----------------------------------------------------
+  // NOTE: Assuming 'model' is defined and configured globally or passed in scope.
+  if (typeof model === 'undefined' || model === null) {
+      throw new Error("Gemini model instance is not defined or accessible.");
+  }
+  
+  const result = await model.generateContent(SYSTEM_PROMPT);
+  
+  // The prompt strictly asks for 'plain text only', so no additional cleanup 
+  // like trimming whitespace or removing markdown should be needed, 
+  // but a safety trim is good practice.
+  return result.response.text().trim();
 }
 
 const chatQueue = [];
