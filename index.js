@@ -88,7 +88,7 @@ app.get("/check-login", async (req, res) => {
           );
           // Optionally notify client via WebSocket or another API
           watchChatList(async (messageText) => {
-            addChatTask(messageText?.name);
+            addChatTask(messageText?.name, messageText?.isGroup);
             saveSession();
             console.log("New message received:", messageText);
           }).then(() => {
@@ -104,7 +104,7 @@ app.get("/check-login", async (req, res) => {
 app.get("/", (req, res) => {
   res.send("WhatsApp Bot is running.");
 });
-app.get("/re-watch", reWatch);
+
 const PORT = Number(process.env.PORT) || "8080";
 const HOST = process.env.HOST || "0.0.0.0";
 // setInterval(() => {
