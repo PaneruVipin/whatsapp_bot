@@ -5,6 +5,7 @@ import { chromium } from "playwright";
 import fs from "fs";
 import path from "path";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { time } from "console";
 const SESSION_FILE = path.resolve(
   process.env.SESSION_FILE || "./dist/--bot-session--/session.json"
 );
@@ -229,7 +230,7 @@ export async function readAllMessages() {
 
 console.log(
   "Gemini API Key:",
-  process.env.GEMINI_API_KEY?.slice(0, 4) + "****"
+  process?.env?.GEMINI_API_KEY?.slice(0, 4) + "****"
 );
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
@@ -347,6 +348,9 @@ You are chatting on WhatsApp as me. Follow these instructions carefully:
     - Managing multi-person group chats.
     - Adjusting tone for different relationship dynamics (friends, colleagues, etc.).
 
+## Language Rule
+32. Always respond in the same language as the last user message (Hindi or English). If the last message is in Hindi, reply in Hindi; if in English, reply in English.
+
 Professional Profile (use only when relevant):
 ${vipinProfile}
 
@@ -364,8 +368,12 @@ const chatQueue = [];
 let isProcessing = false;
 
 export function addChatTask(title, isGroup) {
-  chatQueue.push({ title, isGroup });
-  processQueue();
+  try {
+    chatQueue.push({ title, isGroup });
+    processQueue();
+  } catch (err) {
+    console.log("Error adding chat task:", err);
+  }
 }
 async function processQueue() {
   try {
@@ -381,24 +389,17 @@ async function processQueue() {
       // Open chat
 
       await openChat(task.title, task.isGroup);
-      const [reply, chatInput] = await Promise.all([
-        (async () => {
-          // Load chat history
-          const chatHistory = await getChatHistory(task.title);
-          console.log("Chat history:", chatHistory?.length, chatHistory?.[0]);
-          // Generate reply from Gemini
-          const reply = await replyUsingGemini(chatHistory);
-          console.log("Generated reply:", reply);
-          return reply;
-        })(),
-        page.$("*[aria-placeholder='Type a message']"),
-      ]);
+      const chatHistory = await getChatHistory(task.title);
+      console.log("Chat history:", chatHistory?.length, chatHistory?.[0]);
+      // Generate reply from Gemini
+      const reply = await replyUsingGemini(chatHistory);
+      console.log("Generated reply:", reply);
 
       if (reply.trim().toLowerCase() === "skip") {
         console.log("Skipping reply as per Gemini instruction");
         continue;
       }
-      await sendMessage(reply, chatInput);
+      await sendMessage(reply);
       // Human-like delay
       // await page.waitForTimeout(1000 + Math.random() * 2000);
     }
@@ -413,7 +414,10 @@ async function processQueue() {
 async function sendMessage(text, input) {
   // 1️⃣ Find the contenteditable div
   try {
-    // const input = await page.$("*[aria-placeholder='Type a message']");
+    const input = await page?.waitForSelector(
+      "*[aria-placeholder='Type a message']",
+      { timeout: 10000 }
+    );
     if (!input) {
       console.log("WhatsApp message box not found");
       return;

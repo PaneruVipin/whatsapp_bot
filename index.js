@@ -89,7 +89,7 @@ app.get("/check-login", async (req, res) => {
           // Optionally notify client via WebSocket or another API
           watchChatList(async (messageText) => {
             addChatTask(messageText?.name, messageText?.isGroup);
-            saveSession();
+            // saveSession();
             console.log("New message received:", messageText);
           }).then(() => {
             console.log("✅ Now observing messages");
