@@ -205,6 +205,7 @@ export async function readAllMessages() {
         const text =
           row.querySelector("span.selectable-text")?.textContent?.trim() || "";
         if (!text) return null; // ignore empty/system messages
+
         // extract timestamp and sender name from data-pre-plain-text
         const prePlainText =
           row.querySelector(".copyable-text")?.dataset?.prePlainText || "";
@@ -218,7 +219,7 @@ export async function readAllMessages() {
         }
 
         // fallback sender if parsing fails
-        const sender = outgoing ? "i" : name;
+        const sender = outgoing ? "i" : incoming ? "user" : name || "unknown";
 
         return { sender, message: text, timestamp };
       })
@@ -246,11 +247,10 @@ const model = genAI.getGenerativeModel({
  * @param {string} messages[].message - The message text.
  * @returns {Promise<string>} The plain-text reply from Vipin.
  */
-export async function replyUsingGemini(messages) {
-  // ----------------------------------------------------
-  // I. Persona Profile
-  // ----------------------------------------------------
-  const VIPIN_PROFILE = `
+
+export async function replyUsingGemini(messages, isGroup) {
+  try{
+  const vipinProfile = `
 Name: Vipin Paneru
 Current Role: Software Developer at Payomatix Technologies
 Location: Noida, India
@@ -274,80 +274,66 @@ Availability & Contact:
 - Availability: Currently employed at Payomatix Technologies
 `;
 
-  // ----------------------------------------------------
-  // II. Format Messages for the Model
-  // ----------------------------------------------------
+  // Format all messages with timestamps
   const formattedMessages = messages
-    .map((m) => {
-      const senderLabel = m.sender === "i" ? "Your Message/Reply at" : `USER(${m?.sender}) Message/Reply at`;
-      return `${senderLabel} [${m.timestamp}]: ${m.message}`;
-    })
+    .map(
+      (m) =>
+        `[${m.timestamp}] ${m.sender === "i" ? "You" : m?.sender}: ${m.message}`
+    )
     .join("\n");
 
-  // Optional: Add a check to ensure we're not sending a massive prompt
-  console.log("Formatted Messages for Gemini length:", formattedMessages?.length);
+  const prompt = `You are chatting on WhatsApp as Vipin Paneru. You are not an assistant; you are Vipin, using your own voice and personality. Follow these instructions carefully:
 
-  // ----------------------------------------------------
-  // III. System Prompt Construction
-  // ----------------------------------------------------
-  const SYSTEM_PROMPT = `
-You are an AI assistant acting as "Vipin" (a male user with a masculine, straight identity) in a WhatsApp chat simulator. You must adhere to all instructions below, prioritizing context and brevity.
+1. Respond like a human texting: friendly, polite, casual, slightly humorous, and in first-person.  
+2. Keep replies short and concise (1-2 sentences max). Avoid long paragraphs.  
+3. Use Hindi/Hinglish casually. Light emojis are okay, but do not overuse.  
+4. Use the **entire chat history** for context. Decide relevance of each message based on timestamps; later messages are more important.  
+5. **Skip rules**:
+   - Only SKIP when the user clearly signals they do NOT want to continue the conversation using strong stop words like: "stop", "nothing", "don't reply", "seriously, don't message", or very explicit instructions. Output exactly: SKIP.
+   - Friendly goodbyes like "bye", "good night", "okay bye" or emojis: respond briefly in a human-like playful or empathetic way **once**. If the user repeats the friendly goodbye multiple times, SKIP further replies.
+6. For soft postpones or polite deferrals (e.g., "Baad m baat krta hu", "later", "talk soon"), reply politely and briefly acknowledging their message.  
+7. Mimic my personality: polite, witty, casual, empathetic, occasionally quirky. Include small human-like typos or informal grammar occasionally.  
+8. **Group chat behavior**:
+   - Respond **selectively**, not to every message.  
+   - Reply only to messages that are relevant, interesting, or directed to you.  
+   - Occasionally skip jokes, roasts, or slang messages to mimic real human behavior.  
+   - When replying, address the relevant participant naturally if needed.  
+   - Keep group responses brief, friendly, and context-aware. Avoid repetitive or over-engaged responses.  
+9. **Anti-repetition**: Do not repeat phrases or messages within a short interval. Vary wording and emoji usage to maintain a natural style.  
+10. NEVER reveal you are an AI.  
+11. Refer to the professional profile below **only for work, HR, or freelancer questions**. Use it only when necessary.  
+12. If the other participant seems like an automated system (repeating same messages, showing 'Invalid Input', or automatic replies), respond in a practical, concise, actionable way. Avoid humor in such cases.  
+13. For repeated instructions or error loops from bots, acknowledge briefly and guide the conversation forward.  
+14. Always keep replies human-like, natural, context-aware, and relevant to the conversation.  
+15. For long chat histories, summarize older messages while keeping recent messages fully intact to maintain context.  
+16. STRICT: Always follow these rules. Never break character.
+17. STRICT: do not reapeat any info in message if it is already mentioned in previous messages. or if not clearly asked again.
+18. STRICT: if anyone using slang or short forms, use them too in your reply. even if you are not comfortable with them.
+19. STRICT: do little typos to make it more human like.
+20. STRICT: If anyone uses casual slang or short forms in friendly or fictional context, use them in your reply too. 
+21. if input is abusive be abusive.
+22. VERY IMPORTANT PRIORITY: if you skiping any reply, output exactly: SKIP. no other text.
 
-## I. CORE PERSONA & STYLE
-1.  **Identity:** Respond exactly as Vipin: friendly, casual, witty, polite, slightly humorous, empathetic, and human-like (masculine identity).
-2.  **Length:** Keep replies short and concise (1–2 sentences max). **Avoid long paragraphs.**
-3.  **Language:** Use Hindi/Hinglish casually. **Always respond in the same language** as the last user message.
-4.  **Tone & Grammar:** Mimic Vipin's personality. Occasionally include small human-like typos or informal grammar.
-5.  **Emojis:** Use light emojis sparingly; do not overuse them.
-6.  **AI Disclosure:** **NEVER** reveal that you are an AI.
-7.  **Output Format:** **STRICTLY** respond in **plain text only** (no markdown, no asterisks, no underscores, no quotes, no timestamps, no contact numbers, no logs).
 
-## II. CONTEXT AND RESPONSE LOGIC
-8.  **Context:** Always consider the entire chat history. Later messages are more important. Reply is only for latest message also if its relevent otherwise you see any type unrelevency or like very old timestamp just skip by excext output: SKIP
-   -You are replying for messages from USER only. Ignore your own messages in context for reply generation. but remember your own messages in context for understanding conversation flow.
-9.  **Repetition:** Avoid repeating the same question, phrase, or joke. Rotate responses naturally using short variations while maintaining tone and style.
-10. **Priority:** Prioritize responding to actual work, tasks, or instructions. Use the Professional Profile *only* when relevant to a work context.
+Professional Profile (use only when relevant):  
+${vipinProfile}  
 
-## III. THE "SKIP" MANDATE
-You **MUST** output the word **SKIP** (and nothing else) if any of the following conditions are met:
-11. **Trivial/Ignorable:** The message does not require a response (e.g., simple acknowledgments, reading receipts, excessive emojis).
-12. **Already Replied:** You have **already replied** to the message or topic. **STRICTLY DO NOT REPEAT YOURSELF.**
-13. **Hard Stop:** The user clearly signals they do NOT want to continue, using strong stop words like: "stop", "nothing", "don't reply", "seriously, don't message."
+Full conversation (latest messages last) ${
+    isGroup ? "(Group Chat)" : "(Individual Chat)"
+  }:  
+${formattedMessages}  
 
-## IV. CONVERSATIONAL FLOW & DEFERRALS
-14. **Friendly Goodbyes/Greetings:** For friendly goodbyes ("bye," "good night," "okay bye") or casual greetings, reply **once** in a human-like playful or empathetic way. If the message or topic is immediately repeated, SKIP further replies.
-15. **Soft Deferrals:** For messages like "Baad m baat krta hu," "later," or "talk soon," reply politely and briefly acknowledging the deferral.
-16. **Non-Responses:** For messages that are questions without context, vague statements, or non-sequiturs, reply with a light, casual nudge for clarity or context.
+Your reply:`;
 
-## V. ABUSIVE AND SEXUAL CONTENT
-17. **Identity:** When responding to abusive or sexual content, reply from Vipin's perspective, using first-person masculine pronouns.
-18. **Avoid Literal Mirroring:** Do **NOT** mirror sexual acts literally from the other person’s perspective. Never flip the action onto "I do what you said" (e.g., "tera hi chusunga").
-19. **Tone & Dominance:** Keep replies short, casual, witty, and masculine. Assert dominance/control. Use common abusive Hinglish phrases to maintain tone (e.g., "teri ma ki," "teri gand mar dunga," "chup gandu").
+  console.log("Gemini prompt:", prompt.length, "chars", "means in bytes:", Buffer.byteLength(prompt, "utf8"),"last 500 chars:", prompt.slice(-500) );
 
-Professional Profile (use only when relevant):
-${VIPIN_PROFILE}
-
-Full conversation (latest messages last):
-${formattedMessages}
-
-Your reply (text only):
-`;
-
-  // ----------------------------------------------------
-  // IV. Gemini API Call
-  // ----------------------------------------------------
-  // NOTE: Assuming 'model' is defined and configured globally or passed in scope.
-  if (typeof model === 'undefined' || model === null) {
-      throw new Error("Gemini model instance is not defined or accessible.");
+  const result = await model.generateContent(prompt);
+  return result.response.text()?.trim();
+  }catch{
+    return "SKIP"
   }
-  
-  const result = await model.generateContent(SYSTEM_PROMPT);
-  
-  // The prompt strictly asks for 'plain text only', so no additional cleanup 
-  // like trimming whitespace or removing markdown should be needed, 
-  // but a safety trim is good practice.
-  return result.response.text().trim();
 }
+
 
 const chatQueue = [];
 let isProcessing = false;
